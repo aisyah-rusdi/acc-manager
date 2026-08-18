@@ -180,56 +180,44 @@ export default function App() {
           {/* ── Header band ── */}
           <div style={{
             backgroundColor: '#5A3E9E',
-            padding: '20px 22px 18px',
+            padding: '12px 14px 11px',
             display: 'flex',
-            alignItems: 'flex-end',
+            alignItems: 'center',
             justifyContent: 'space-between',
             flexShrink: 0,
           }}>
-            <div>
-              <h1 style={{
-                fontFamily: "'Press Start 2P', monospace",
-                fontSize: '22px',
-                color: '#FAF3E6',
-                margin: 0,
-                lineHeight: 1.4,
-                letterSpacing: '0.02em',
-                textShadow: `2px 2px 0 #3D2E52, 4px 4px 0 rgba(61,46,82,0.4)`,
-              }}>
-                SWITCHBOARD
-              </h1>
-              <p style={{
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: '10px',
-                color: 'rgba(250,243,230,0.55)',
-                margin: '8px 0 0',
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-              }}>
-                {'>'} Account attention tracker v1.0
-              </p>
-            </div>
+            <h1 style={{
+              fontFamily: "'Press Start 2P', monospace",
+              fontSize: '13px',
+              color: '#FAF3E6',
+              margin: 0,
+              lineHeight: 1,
+              letterSpacing: '0.02em',
+              textShadow: `1.5px 1.5px 0 #3D2E52`,
+            }}>
+              SWITCHBOARD
+            </h1>
 
             {/* Status readout — informational only, not clickable */}
             <div style={{
               border: hasOverdue ? '2px solid #A23262' : '1px dashed rgba(200,186,232,0.35)',
               backgroundColor: hasOverdue ? '#A23262' : 'transparent',
-              boxShadow: hasOverdue ? px('#7A1040', 3) : 'none',
-              padding: hasOverdue ? '8px 14px' : '6px 12px',
+              boxShadow: hasOverdue ? px('#7A1040', 2) : 'none',
+              padding: hasOverdue ? '5px 9px' : '4px 8px',
               display: 'flex',
               alignItems: 'center',
-              gap: '10px',
+              gap: '6px',
             }}>
               {hasOverdue ? (
                 <>
                   <div style={{
-                    width: '10px', height: '10px',
+                    width: '8px', height: '8px',
                     backgroundColor: '#FAF3E6',
                     clipPath: 'polygon(50% 0%, 100% 100%, 0% 100%)',
                   }} className="blink" />
                   <span style={{
                     fontFamily: "'Press Start 2P', monospace",
-                    fontSize: '8px',
+                    fontSize: '7px',
                     color: '#FAF3E6',
                     letterSpacing: '0.05em',
                   }}>
@@ -238,10 +226,10 @@ export default function App() {
                   <div style={{
                     backgroundColor: '#FAF3E6',
                     color: '#A23262',
-                    padding: '3px 7px',
+                    padding: '2px 5px',
                     fontFamily: "'Press Start 2P', monospace",
-                    fontSize: '8px',
-                    minWidth: '24px',
+                    fontSize: '7px',
+                    minWidth: '18px',
                     textAlign: 'center',
                   }}>
                     {overdueCount}
@@ -249,14 +237,14 @@ export default function App() {
                 </>
               ) : (
                 <>
-                  <div style={{ width: '8px', height: '8px', backgroundColor: '#7B62BC' }} />
-                  <div style={{ width: '8px', height: '8px', backgroundColor: '#9A80D4' }} />
+                  <div style={{ width: '6px', height: '6px', backgroundColor: '#7B62BC' }} />
+                  <div style={{ width: '6px', height: '6px', backgroundColor: '#9A80D4' }} />
                   <span style={{
                     fontFamily: "'IBM Plex Mono', monospace",
-                    fontSize: '10px',
+                    fontSize: '9px',
                     fontWeight: 500,
                     color: 'rgba(250,243,230,0.6)',
-                    letterSpacing: '0.08em',
+                    letterSpacing: '0.06em',
                   }}>
                     STATUS: CLEAR
                   </span>
@@ -266,11 +254,11 @@ export default function App() {
           </div>
 
           {/* ── Add account section ── */}
-          <div style={{ padding: '18px 22px', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+          <div style={{ padding: '12px 14px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
               <span style={{
                 fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: '10px',
+                fontSize: '9px',
                 fontWeight: 500,
                 letterSpacing: '0.12em',
                 color: '#7A6890',
@@ -278,20 +266,13 @@ export default function App() {
                 // ADD ACCOUNT
               </span>
             </div>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
               <PixelInput
                 placeholder="Account name"
                 value={nameInput}
                 onChange={setNameInput}
                 onEnter={handleAdd}
                 flex="1"
-              />
-              <PixelInput
-                placeholder="Notes (optional)"
-                value={notesInput}
-                onChange={setNotesInput}
-                onEnter={handleAdd}
-                flex="1.5"
               />
               <PixelButton
                 label="+ ADD"
@@ -300,16 +281,26 @@ export default function App() {
                 color="#5A3E9E"
               />
             </div>
+            <div style={{ display: 'flex', marginBottom: '10px' }}>
+              <PixelInput
+                placeholder="Notes (optional)"
+                value={notesInput}
+                onChange={setNotesInput}
+                onEnter={handleAdd}
+                flex="1"
+              />
+            </div>
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              padding: '8px 12px',
+              flexWrap: 'wrap',
+              gap: '6px',
+              padding: '7px 10px',
               border: '2px solid #C8BAE8',
               backgroundColor: 'rgba(90,62,158,0.04)',
             }}>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '11px', color: '#7A6890', letterSpacing: '0.06em' }}>
-                {'>'} RETURN WINDOW:
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '9px', color: '#7A6890', letterSpacing: '0.05em' }}>
+                {'>'} WINDOW:
               </span>
               <input
                 type="number"
@@ -319,33 +310,33 @@ export default function App() {
                 onChange={e => setWindowInput(e.target.value)}
                 onBlur={handleWindowBlur}
                 style={{
-                  width: '46px',
-                  padding: '4px 8px',
+                  width: '38px',
+                  padding: '3px 6px',
                   border: '2px solid #5A3E9E',
                   backgroundColor: '#FAF3E6',
                   fontFamily: "'Press Start 2P', monospace",
-                  fontSize: '10px',
+                  fontSize: '9px',
                   color: '#5A3E9E',
                   textAlign: 'center',
                   outline: 'none',
                 }}
               />
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '11px', color: '#7A6890', letterSpacing: '0.06em' }}>
-                MIN / UNATTENDED SWITCH SHAKES LOOSE
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '9px', color: '#7A6890', letterSpacing: '0.05em' }}>
+                MIN TIL UNATTENDED SWITCH SHAKES LOOSE
               </span>
             </div>
           </div>
 
           {/* ── Accounts section ── */}
           <div style={{
-            padding: '18px 22px',
+            padding: '12px 14px',
             display: 'flex',
             flexDirection: 'column',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexShrink: 0 }}>
               <span style={{
                 fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: '10px',
+                fontSize: '9px',
                 fontWeight: 500,
                 letterSpacing: '0.12em',
                 color: '#7A6890',
@@ -354,9 +345,9 @@ export default function App() {
               </span>
               <span style={{
                 fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: '10px',
+                fontSize: '9px',
                 color: '#B0A0C8',
-                letterSpacing: '0.08em',
+                letterSpacing: '0.06em',
               }}>
                 {accounts.length} LOADED
               </span>
@@ -365,11 +356,11 @@ export default function App() {
             {accounts.length === 0 && (
               <div style={{
                 textAlign: 'center',
-                padding: '40px 24px',
+                padding: '28px 16px',
                 color: '#C0B0D8',
                 fontFamily: "'Press Start 2P', monospace",
-                fontSize: '9px',
-                letterSpacing: '0.08em',
+                fontSize: '8px',
+                letterSpacing: '0.06em',
                 lineHeight: 2,
               }}>
                 NO ACCOUNTS FOUND.<br />
@@ -380,8 +371,8 @@ export default function App() {
             <div style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: '8px',
-              maxHeight: '236px',
+              gap: '6px',
+              maxHeight: '186px',
               overflowY: 'auto',
               paddingRight: accounts.length > 3 ? '4px' : '0',
             }}>
@@ -475,12 +466,12 @@ function PixelInput({ placeholder, value, onChange, onEnter, flex }: {
       onBlur={() => setFocused(false)}
       style={{
         flex: `${flex} 1 0`,
-        padding: '10px 12px',
+        padding: '7px 9px',
         border: `2px solid ${focused ? '#5A3E9E' : '#C8BAE8'}`,
         boxShadow: focused ? `2px 2px 0 #5A3E9E` : `2px 2px 0 #C8BAE8`,
         backgroundColor: focused ? '#FFFDF8' : '#FAF3E6',
         fontFamily: "'IBM Plex Mono', monospace",
-        fontSize: '12px',
+        fontSize: '11px',
         color: '#3D2E52',
         outline: 'none',
         transition: 'border-color 0.08s, box-shadow 0.08s',
@@ -509,16 +500,16 @@ function PixelButton({ label, onClick, disabled, color }: {
       onMouseUp={() => setPressed(false)}
       onMouseLeave={() => setPressed(false)}
       style={{
-        padding: '10px 18px',
+        padding: '7px 12px',
         border: `2px solid ${disabled ? '#A898C8' : '#3D2E52'}`,
         backgroundColor: bg,
         color: '#FAF3E6',
         fontFamily: "'Press Start 2P', monospace",
-        fontSize: '9px',
-        letterSpacing: '0.06em',
+        fontSize: '8px',
+        letterSpacing: '0.05em',
         cursor: disabled ? 'not-allowed' : 'pointer',
-        boxShadow: pressed || disabled ? 'none' : `3px 3px 0 ${shadow}`,
-        transform: pressed && !disabled ? 'translate(3px, 3px)' : 'none',
+        boxShadow: pressed || disabled ? 'none' : `2px 2px 0 ${shadow}`,
+        transform: pressed && !disabled ? 'translate(2px, 2px)' : 'none',
         transition: 'transform 0.06s, box-shadow 0.06s',
         whiteSpace: 'nowrap',
         borderRadius: 0,
@@ -586,11 +577,11 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
         }} />
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 11px' }}>
 
         {/* LED dot — pixel square */}
         <div style={{
-          width: '12px', height: '12px', flexShrink: 0,
+          width: '9px', height: '9px', flexShrink: 0,
           backgroundColor: isOverdue ? '#A23262' : isPending ? '#C98A3E' : '#5A3E9E',
           boxShadow: isOverdue
             ? `0 0 0 2px #FAF3E6, 0 0 0 3px #A23262`
@@ -603,7 +594,7 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: '13px',
+            fontSize: '11px',
             fontWeight: 500,
             color: '#3D2E52',
             letterSpacing: '0.02em',
@@ -616,10 +607,10 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
           {notes && (
             <div style={{
               fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: '10px',
+              fontSize: '9px',
               color: '#9A88B0',
-              marginTop: '3px',
-              letterSpacing: '0.04em',
+              marginTop: '2px',
+              letterSpacing: '0.03em',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -634,14 +625,14 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
           <div style={{
             border: '2px solid #A23262',
             backgroundColor: '#A23262',
-            padding: '3px 8px',
+            padding: '2px 6px',
             flexShrink: 0,
           }} className="blink">
             <span style={{
               fontFamily: "'Press Start 2P', monospace",
-              fontSize: '7px',
+              fontSize: '6px',
               color: '#FAF3E6',
-              letterSpacing: '0.1em',
+              letterSpacing: '0.08em',
             }}>
               !!! OVERDUE
             </span>
@@ -653,9 +644,9 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
             <div style={{
               fontFamily: "'Press Start 2P', monospace",
-              fontSize: '16px',
+              fontSize: '12px',
               color: '#C98A3E',
-              letterSpacing: '0.04em',
+              letterSpacing: '0.03em',
               lineHeight: 1,
               textShadow: `1px 1px 0 rgba(201,138,62,0.4)`,
             }}>
@@ -663,11 +654,11 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
             </div>
             <div style={{
               fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: '9px',
+              fontSize: '7px',
               color: '#D4A870',
-              letterSpacing: '0.1em',
+              letterSpacing: '0.08em',
               textTransform: 'uppercase',
-              marginTop: '3px',
+              marginTop: '2px',
               opacity: 0.7,
             }}>
               remaining
@@ -676,7 +667,7 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
         )}
 
         {/* Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           {state === 'idle' && (
             <PixelButton label="SWITCH >" onClick={() => onSwitchAway(id)} color="#5A3E9E" />
           )}
@@ -702,14 +693,14 @@ function PixelIconButton({ onClick }: { onClick: () => void }) {
       onMouseUp={() => setPressed(false)}
       title="Remove"
       style={{
-        width: '30px', height: '30px',
+        width: '22px', height: '22px',
         border: `2px solid ${hovered ? '#A23262' : '#E0D0F0'}`,
         backgroundColor: hovered ? '#A23262' : 'transparent',
         color: hovered ? '#FAF3E6' : '#C0B0D8',
         cursor: 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontFamily: "'Press Start 2P', monospace",
-        fontSize: '11px',
+        fontSize: '9px',
         boxShadow: pressed ? 'none' : hovered ? `2px 2px 0 #7A1040` : 'none',
         transform: pressed ? 'translate(2px, 2px)' : 'none',
         transition: 'all 0.06s',
@@ -727,13 +718,13 @@ function PixelBerries() {
   return (
     <div aria-hidden style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
       {/* top-left cluster */}
-      <BerryCluster x={-24} y={-24} colors={['#5A3E9E', '#7B62BC', '#9A80D4', '#3D2E52']} size={120} />
+      <BerryCluster x={-14} y={-14} colors={['#5A3E9E', '#7B62BC', '#9A80D4', '#3D2E52']} size={60} />
       {/* top-right */}
-      <BerryCluster x="calc(100% - 96px)" y={-20} colors={['#5A3E9E', '#A23262', '#7B62BC']} size={100} />
+      <BerryCluster x="calc(100% - 50px)" y={-10} colors={['#5A3E9E', '#A23262', '#7B62BC']} size={52} />
       {/* bottom-left */}
-      <BerryCluster x={-20} y="calc(100% - 100px)" colors={['#A23262', '#5A3E9E', '#C98A3E']} size={110} />
+      <BerryCluster x={-10} y="calc(100% - 52px)" colors={['#A23262', '#5A3E9E', '#C98A3E']} size={56} />
       {/* bottom-right */}
-      <BerryCluster x="calc(100% - 80px)" y="calc(100% - 80px)" colors={['#5A3E9E', '#7B62BC', '#3D2E52']} size={95} />
+      <BerryCluster x="calc(100% - 42px)" y="calc(100% - 42px)" colors={['#5A3E9E', '#7B62BC', '#3D2E52']} size={48} />
     </div>
   )
 }
