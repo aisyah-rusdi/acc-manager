@@ -1,5 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
+declare global {
+  interface Window {
+    electronAPI?: {
+      minimize: () => void
+      maximizeToggle: () => void
+      close: () => void
+    }
+  }
+}
+
 type AccountState = 'idle' | 'pending' | 'overdue'
 
 interface Account {
@@ -50,7 +60,6 @@ export default function App() {
     { id: '3', name: 'Freelance', notes: 'Studio client work', state: 'idle', switchedAt: null, shaking: false },
   ])
   const [nameInput, setNameInput] = useState('')
-  const [notesInput, setNotesInput] = useState('')
   const [returnWindow, setReturnWindow] = useState(DEFAULT_WINDOW)
   const [windowInput, setWindowInput] = useState(String(DEFAULT_WINDOW))
 
@@ -85,14 +94,13 @@ export default function App() {
     setAccounts(prev => [...prev, {
       id: crypto.randomUUID(),
       name: trimmed,
-      notes: notesInput.trim(),
+      notes: '',
       state: 'idle',
       switchedAt: null,
       shaking: false,
     }])
     setNameInput('')
-    setNotesInput('')
-  }, [nameInput, notesInput])
+  }, [nameInput])
 
   const handleSwitchAway = useCallback((id: string) => {
     setAccounts(prev => prev.map(a =>
@@ -128,7 +136,7 @@ export default function App() {
       position: 'relative',
       /* pixel dot grid background */
       backgroundImage: `
-        ${ditherBg('#5A3E9E', 0.05)}
+        ${ditherBg('#5A3E9E', 0.09)}
       `,
       backgroundSize: '8px 8px',
       display: 'flex',
@@ -156,25 +164,28 @@ export default function App() {
           {/* ── Title bar ── */}
           <div style={{
             backgroundColor: '#3D2E52',
-            padding: '5px 12px',
+            padding: '5px 10px 5px 12px',
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
             flexShrink: 0,
-          }}>
-            {['#A23262', '#C98A3E', '#5A3E9E'].map((c, i) => (
-              <div key={i} style={{ width: '8px', height: '8px', backgroundColor: c }} />
-            ))}
+            WebkitAppRegion: 'drag',
+          } as React.CSSProperties}>
             <span style={{
               fontFamily: "'Press Start 2P', monospace",
               fontSize: '8px',
               color: '#FAF3E6',
-              marginLeft: '8px',
               letterSpacing: '0.05em',
               opacity: 0.7,
+              flex: 1,
             }}>
               SWITCHBOARD.EXE
             </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+              <TitleBarDot color="#C98A3E" onClick={() => window.electronAPI?.minimize()} title="Minimize" />
+              <TitleBarDot color="#5A3E9E" onClick={() => window.electronAPI?.maximizeToggle()} title="Maximize / Restore" />
+              <TitleBarDot color="#A23262" onClick={() => window.electronAPI?.close()} title="Close" />
+            </div>
           </div>
 
           {/* ── Header band ── */}
@@ -241,7 +252,7 @@ export default function App() {
                   <div style={{ width: '6px', height: '6px', backgroundColor: '#9A80D4' }} />
                   <span style={{
                     fontFamily: "'IBM Plex Mono', monospace",
-                    fontSize: '9px',
+                    fontSize: '10.5px',
                     fontWeight: 500,
                     color: 'rgba(250,243,230,0.6)',
                     letterSpacing: '0.06em',
@@ -258,7 +269,7 @@ export default function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
               <span style={{
                 fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: '9px',
+                fontSize: '10.5px',
                 fontWeight: 500,
                 letterSpacing: '0.12em',
                 color: '#7A6890',
@@ -266,7 +277,7 @@ export default function App() {
                 // ADD ACCOUNT
               </span>
             </div>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <PixelInput
                 placeholder="Account name"
                 value={nameInput}
@@ -274,56 +285,36 @@ export default function App() {
                 onEnter={handleAdd}
                 flex="1"
               />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '8px', color: '#7A6890', letterSpacing: '0.04em' }}>
+                  MIN
+                </span>
+                <input
+                  type="number"
+                  min="1"
+                  max="120"
+                  value={windowInput}
+                  onChange={e => setWindowInput(e.target.value)}
+                  onBlur={handleWindowBlur}
+                  style={{
+                    width: '32px',
+                    padding: '6px 4px',
+                    border: '2px solid #5A3E9E',
+                    backgroundColor: '#FAF3E6',
+                    fontFamily: "'Press Start 2P', monospace",
+                    fontSize: '9px',
+                    color: '#5A3E9E',
+                    textAlign: 'center',
+                    outline: 'none',
+                  }}
+                />
+              </div>
               <PixelButton
                 label="+ ADD"
                 disabled={!nameInput.trim()}
                 onClick={handleAdd}
                 color="#5A3E9E"
               />
-            </div>
-            <div style={{ display: 'flex', marginBottom: '10px' }}>
-              <PixelInput
-                placeholder="Notes (optional)"
-                value={notesInput}
-                onChange={setNotesInput}
-                onEnter={handleAdd}
-                flex="1"
-              />
-            </div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '6px',
-              padding: '7px 10px',
-              border: '2px solid #C8BAE8',
-              backgroundColor: 'rgba(90,62,158,0.04)',
-            }}>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '9px', color: '#7A6890', letterSpacing: '0.05em' }}>
-                {'>'} WINDOW:
-              </span>
-              <input
-                type="number"
-                min="1"
-                max="120"
-                value={windowInput}
-                onChange={e => setWindowInput(e.target.value)}
-                onBlur={handleWindowBlur}
-                style={{
-                  width: '38px',
-                  padding: '3px 6px',
-                  border: '2px solid #5A3E9E',
-                  backgroundColor: '#FAF3E6',
-                  fontFamily: "'Press Start 2P', monospace",
-                  fontSize: '9px',
-                  color: '#5A3E9E',
-                  textAlign: 'center',
-                  outline: 'none',
-                }}
-              />
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '9px', color: '#7A6890', letterSpacing: '0.05em' }}>
-                MIN TIL UNATTENDED SWITCH SHAKES LOOSE
-              </span>
             </div>
           </div>
 
@@ -336,7 +327,7 @@ export default function App() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexShrink: 0 }}>
               <span style={{
                 fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: '9px',
+                fontSize: '10.5px',
                 fontWeight: 500,
                 letterSpacing: '0.12em',
                 color: '#7A6890',
@@ -345,7 +336,7 @@ export default function App() {
               </span>
               <span style={{
                 fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: '9px',
+                fontSize: '10.5px',
                 color: '#B0A0C8',
                 letterSpacing: '0.06em',
               }}>
@@ -607,7 +598,7 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
           {notes && (
             <div style={{
               fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: '9px',
+              fontSize: '10.5px',
               color: '#9A88B0',
               marginTop: '2px',
               letterSpacing: '0.03em',
@@ -681,6 +672,39 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
   )
 }
 
+/* ─── Title bar window control dot ─── */
+function TitleBarDot({ color, onClick, title }: {
+  color: string
+  onClick: () => void
+  title: string
+}) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title={title}
+      style={{
+        width: '16px', height: '16px',
+        border: 'none',
+        backgroundColor: 'transparent',
+        cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 0,
+      }}
+    >
+      <div style={{
+        width: '8px', height: '8px',
+        backgroundColor: color,
+        transform: hovered ? 'scale(1.35)' : 'scale(1)',
+        boxShadow: hovered ? `0 0 0 2px rgba(250,243,230,0.25)` : 'none',
+        transition: 'transform 0.1s, box-shadow 0.1s',
+      }} />
+    </button>
+  )
+}
+
 function PixelIconButton({ onClick }: { onClick: () => void }) {
   const [hovered, setHovered] = useState(false)
   const [pressed, setPressed] = useState(false)
@@ -717,14 +741,18 @@ function PixelIconButton({ onClick }: { onClick: () => void }) {
 function PixelBerries() {
   return (
     <div aria-hidden style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
-      {/* top-left cluster */}
-      <BerryCluster x={-14} y={-14} colors={['#5A3E9E', '#7B62BC', '#9A80D4', '#3D2E52']} size={60} />
-      {/* top-right */}
-      <BerryCluster x="calc(100% - 50px)" y={-10} colors={['#5A3E9E', '#A23262', '#7B62BC']} size={52} />
       {/* bottom-left */}
-      <BerryCluster x={-10} y="calc(100% - 52px)" colors={['#A23262', '#5A3E9E', '#C98A3E']} size={56} />
+      <BerryCluster x={6} y="calc(100% - 50px)" colors={['#A23262', '#5A3E9E', '#C98A3E']} size={50} />
       {/* bottom-right */}
-      <BerryCluster x="calc(100% - 42px)" y="calc(100% - 42px)" colors={['#5A3E9E', '#7B62BC', '#3D2E52']} size={48} />
+      <BerryCluster x="calc(100% - 50px)" y="calc(100% - 50px)" colors={['#5A3E9E', '#7B62BC', '#3D2E52']} size={50} />
+      {/* bottom-center */}
+      <BerryCluster x="calc(50% - 22px)" y="calc(100% - 40px)" colors={['#5A3E9E', '#9A80D4', '#A23262']} size={44} />
+      {/* center, behind the accounts list header row */}
+      <BerryCluster x="calc(50% - 18px)" y={148} colors={['#5A3E9E', '#7B62BC', '#C98A3E']} size={36} />
+      {/* left-mid, beside the accounts section */}
+      <BerryCluster x={-6} y={200} colors={['#5A3E9E', '#A23262', '#9A80D4']} size={40} />
+      {/* right-mid, beside the accounts section */}
+      <BerryCluster x="calc(100% - 34px)" y={200} colors={['#5A3E9E', '#7B62BC', '#3D2E52']} size={40} />
     </div>
   )
 }
