@@ -22,6 +22,60 @@ interface Account {
 }
 
 const DEFAULT_WINDOW = 5
+const STORAGE_KEY = 'switchboard.accounts.v1'
+const WINDOW_STORAGE_KEY = 'switchboard.returnWindow.v1'
+
+function loadStoredAccounts(): Account[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    // never restore mid-shake animation state
+    return parsed.map((a: Account) => ({ ...a, shaking: false }))
+  } catch {
+    return []
+  }
+}
+
+function loadStoredWindow(): number {
+  try {
+    const raw = localStorage.getItem(WINDOW_STORAGE_KEY)
+    const n = raw ? parseInt(raw, 10) : NaN
+    return !isNaN(n) && n >= 1 ? n : DEFAULT_WINDOW
+  } catch {
+    return DEFAULT_WINDOW
+  }
+}
+
+/* ─── synthesized one-shot bell chime (no external audio file needed) ─── */
+function playOverdueBell() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+    const ctx = new AudioCtx()
+    const now = ctx.currentTime
+
+    const tone = (freq: number, startGain: number, duration: number, delay: number) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, now + delay)
+      gain.gain.setValueAtTime(0.0001, now + delay)
+      gain.gain.exponentialRampToValueAtTime(startGain, now + delay + 0.015)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + duration)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(now + delay)
+      osc.stop(now + delay + duration + 0.05)
+    }
+
+    tone(1046.5, 0.28, 0.55, 0)      // C6
+    tone(1568.0, 0.14, 0.4, 0.02)    // G6 overtone
+
+    setTimeout(() => ctx.close(), 800)
+  } catch {
+    // audio unavailable — fail silently, never block the app
+  }
+}
 
 function formatCountdown(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000))
@@ -54,20 +108,31 @@ const ditherBg = (color: string, alpha: number) => {
 }
 
 export default function App() {
-  const [accounts, setAccounts] = useState<Account[]>([])
+  const [accounts, setAccounts] = useState<Account[]>(loadStoredAccounts)
   const [nameInput, setNameInput] = useState('')
-  const [returnWindow, setReturnWindow] = useState(DEFAULT_WINDOW)
-  const [windowInput, setWindowInput] = useState(String(DEFAULT_WINDOW))
+  const [returnWindow, setReturnWindow] = useState(loadStoredWindow)
+  const [windowInput, setWindowInput] = useState(() => String(loadStoredWindow()))
 
   const hasPending = accounts.some(a => a.state === 'pending' || a.state === 'overdue')
   const now = useNow(hasPending)
   const shakeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
+  // persist accounts + return window so state survives an accidental close/restart
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts)) } catch { /* ignore */ }
+  }, [accounts])
+
+  useEffect(() => {
+    try { localStorage.setItem(WINDOW_STORAGE_KEY, String(returnWindow)) } catch { /* ignore */ }
+  }, [returnWindow])
+
   useEffect(() => {
     const windowMs = returnWindow * 60 * 1000
+    let justWentOverdue = false
     setAccounts(prev => prev.map(a => {
       if (a.state === 'pending' && a.switchedAt !== null) {
         if (now - a.switchedAt >= windowMs) {
+          justWentOverdue = true
           const t = shakeTimers.current.get(a.id)
           if (t) clearTimeout(t)
           const tid = setTimeout(() => {
@@ -79,6 +144,7 @@ export default function App() {
       }
       return a
     }))
+    if (justWentOverdue) playOverdueBell()
   }, [now, returnWindow])
 
   const overdueCount = accounts.filter(a => a.state === 'overdue').length
@@ -128,8 +194,10 @@ export default function App() {
   return (
     <div style={{
       width: '100%',
+      height: '100vh',
       backgroundColor: '#FFFDF8',
       position: 'relative',
+      overflow: 'hidden',
       /* pixel dot grid background */
       backgroundImage: `
         ${ditherBg('#5A3E9E', 0.09)}
@@ -155,6 +223,8 @@ export default function App() {
         display: 'flex',
         flexDirection: 'column',
         width: '100%',
+        height: '100%',
+        overflow: 'hidden',
       }}>
 
           {/* ── Title bar ── */}
@@ -321,6 +391,9 @@ export default function App() {
             padding: '12px 14px',
             display: 'flex',
             flexDirection: 'column',
+            flex: 1,
+            minHeight: 0,
+            overflow: 'hidden',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexShrink: 0 }}>
               <span style={{
@@ -361,9 +434,10 @@ export default function App() {
               display: 'flex',
               flexDirection: 'column',
               gap: '6px',
-              maxHeight: '186px',
+              flex: 1,
+              minHeight: 0,
               overflowY: 'auto',
-              paddingRight: accounts.length > 3 ? '4px' : '0',
+              paddingRight: accounts.length > 0 ? '4px' : '0',
             }}>
               {sorted.map((account) => (
                 <AccountCard
