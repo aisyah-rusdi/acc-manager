@@ -48,3 +48,13 @@ body {
 ::-webkit-scrollbar-track { background: #E8DECE; }
 ::-webkit-scrollbar-thumb { background: #5A3E9E; }
 ::-webkit-scrollbar-thumb:hover { background: #3D2E52; }
+
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

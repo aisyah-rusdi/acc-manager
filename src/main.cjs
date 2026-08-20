@@ -5,10 +5,10 @@ Menu.setApplicationMenu(null);
 
 function createWindow () {
   const win = new BrowserWindow({
-    width: 320,
-    height: 390,
+    width: 280,
+    height: 300,
     minWidth: 280,
-    minHeight: 340,
+    minHeight: 300,
     resizable: true,
     frame: false,
     backgroundColor: '#FFFDF8',

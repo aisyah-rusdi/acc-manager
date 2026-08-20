@@ -54,11 +54,7 @@ const ditherBg = (color: string, alpha: number) => {
 }
 
 export default function App() {
-  const [accounts, setAccounts] = useState<Account[]>([
-    { id: '1', name: 'Acme Corp', notes: 'Main client dashboard', state: 'idle', switchedAt: null, shaking: false },
-    { id: '2', name: 'Personal', notes: 'Side projects', state: 'idle', switchedAt: null, shaking: false },
-    { id: '3', name: 'Freelance', notes: 'Studio client work', state: 'idle', switchedAt: null, shaking: false },
-  ])
+  const [accounts, setAccounts] = useState<Account[]>([])
   const [nameInput, setNameInput] = useState('')
   const [returnWindow, setReturnWindow] = useState(DEFAULT_WINDOW)
   const [windowInput, setWindowInput] = useState(String(DEFAULT_WINDOW))
@@ -182,9 +178,9 @@ export default function App() {
               SWITCHBOARD.EXE
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-              <TitleBarDot color="#C98A3E" onClick={() => window.electronAPI?.minimize()} title="Minimize" />
-              <TitleBarDot color="#5A3E9E" onClick={() => window.electronAPI?.maximizeToggle()} title="Maximize / Restore" />
-              <TitleBarDot color="#A23262" onClick={() => window.electronAPI?.close()} title="Close" />
+              <TitleBarDot color="#C98A3E" icon="─" onClick={() => window.electronAPI?.minimize()} title="Minimize" />
+              <TitleBarDot color="#5A3E9E" icon="□" onClick={() => window.electronAPI?.maximizeToggle()} title="Maximize / Restore" />
+              <TitleBarDot color="#A23262" icon="×" onClick={() => window.electronAPI?.close()} title="Close" />
             </div>
           </div>
 
@@ -296,13 +292,15 @@ export default function App() {
                   value={windowInput}
                   onChange={e => setWindowInput(e.target.value)}
                   onBlur={handleWindowBlur}
+                  className="no-spinner"
                   style={{
-                    width: '32px',
-                    padding: '6px 4px',
+                    width: '30px',
+                    padding: '6px 2px',
                     border: '2px solid #5A3E9E',
                     backgroundColor: '#FAF3E6',
-                    fontFamily: "'Press Start 2P', monospace",
-                    fontSize: '9px',
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontWeight: 600,
+                    fontSize: '11px',
                     color: '#5A3E9E',
                     textAlign: 'center',
                     outline: 'none',
@@ -457,6 +455,7 @@ function PixelInput({ placeholder, value, onChange, onEnter, flex }: {
       onBlur={() => setFocused(false)}
       style={{
         flex: `${flex} 1 0`,
+        minWidth: 0,
         padding: '7px 9px',
         border: `2px solid ${focused ? '#5A3E9E' : '#C8BAE8'}`,
         boxShadow: focused ? `2px 2px 0 #5A3E9E` : `2px 2px 0 #C8BAE8`,
@@ -673,8 +672,9 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
 }
 
 /* ─── Title bar window control dot ─── */
-function TitleBarDot({ color, onClick, title }: {
+function TitleBarDot({ color, icon, onClick, title }: {
   color: string
+  icon: string
   onClick: () => void
   title: string
 }) {
@@ -686,7 +686,7 @@ function TitleBarDot({ color, onClick, title }: {
       onMouseLeave={() => setHovered(false)}
       title={title}
       style={{
-        width: '16px', height: '16px',
+        width: '18px', height: '18px',
         border: 'none',
         backgroundColor: 'transparent',
         cursor: 'pointer',
@@ -695,12 +695,24 @@ function TitleBarDot({ color, onClick, title }: {
       }}
     >
       <div style={{
-        width: '8px', height: '8px',
+        width: '13px', height: '13px',
         backgroundColor: color,
-        transform: hovered ? 'scale(1.35)' : 'scale(1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transform: hovered ? 'scale(1.15)' : 'scale(1)',
         boxShadow: hovered ? `0 0 0 2px rgba(250,243,230,0.25)` : 'none',
         transition: 'transform 0.1s, box-shadow 0.1s',
-      }} />
+      }}>
+        <span style={{
+          fontFamily: "'IBM Plex Mono', monospace",
+          fontSize: '9px',
+          fontWeight: 700,
+          lineHeight: 1,
+          color: 'rgba(0,0,0,0.55)',
+          marginTop: icon === '─' ? '-3px' : '0',
+        }}>
+          {icon}
+        </span>
+      </div>
     </button>
   )
 }
