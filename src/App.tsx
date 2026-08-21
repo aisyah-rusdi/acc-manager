@@ -10,7 +10,7 @@ declare global {
   }
 }
 
-type AccountState = 'idle' | 'pending' | 'overdue'
+type AccountState = 'running' | 'overdue' | 'stopped'
 
 interface Account {
   id: string
@@ -21,12 +21,34 @@ interface Account {
   shaking: boolean
 }
 
+interface HistoryEntry {
+  id: string
+  accountName: string
+  event: 'added' | 'overdue' | 'confirmed' | 'stopped' | 'resumed' | 'removed'
+  timestamp: number
+}
+
 const DEFAULT_WINDOW = 5
-const STORAGE_KEY = 'switchboard.accounts.v1'
+const STORAGE_KEY = 'switchboard.accounts.v2'
 const WINDOW_STORAGE_KEY = 'switchboard.returnWindow.v1'
+const HEARTBEAT_KEY = 'switchboard.lastActive.v1'
+const HISTORY_STORAGE_KEY = 'switchboard.history.v1'
+const HISTORY_MAX_ENTRIES = 200
+const CLOSE_GRACE_PERIOD_MS = 5 * 60 * 1000 // fixed 5 min — independent of the per-account return window
 
 function loadStoredAccounts(): Account[] {
   try {
+    // Was the app closed for longer than the grace period? If so, this was
+    // an intentional close (done for the day) — start fresh instead of
+    // restoring old accounts/timers.
+    const lastActiveRaw = localStorage.getItem(HEARTBEAT_KEY)
+    if (lastActiveRaw) {
+      const lastActive = parseInt(lastActiveRaw, 10)
+      if (!isNaN(lastActive) && Date.now() - lastActive > CLOSE_GRACE_PERIOD_MS) {
+        return []
+      }
+    }
+
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw)
@@ -45,6 +67,17 @@ function loadStoredWindow(): number {
     return !isNaN(n) && n >= 1 ? n : DEFAULT_WINDOW
   } catch {
     return DEFAULT_WINDOW
+  }
+}
+
+function loadStoredHistory(): HistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
   }
 }
 
@@ -109,15 +142,24 @@ const ditherBg = (color: string, alpha: number) => {
 
 export default function App() {
   const [accounts, setAccounts] = useState<Account[]>(loadStoredAccounts)
+  const [history, setHistory] = useState<HistoryEntry[]>(loadStoredHistory)
   const [nameInput, setNameInput] = useState('')
   const [returnWindow, setReturnWindow] = useState(loadStoredWindow)
   const [windowInput, setWindowInput] = useState(() => String(loadStoredWindow()))
+  const [historyOpen, setHistoryOpen] = useState(false)
 
-  const hasPending = accounts.some(a => a.state === 'pending' || a.state === 'overdue')
-  const now = useNow(hasPending)
+  const hasRunning = accounts.some(a => a.state === 'running' || a.state === 'overdue')
+  const now = useNow(hasRunning)
   const shakeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
-  // persist accounts + return window so state survives an accidental close/restart
+  const logHistory = useCallback((accountName: string, event: HistoryEntry['event']) => {
+    setHistory(prev => {
+      const next = [{ id: crypto.randomUUID(), accountName, event, timestamp: Date.now() }, ...prev]
+      return next.slice(0, HISTORY_MAX_ENTRIES)
+    })
+  }, [])
+
+  // persist accounts + return window + history so state survives an accidental close/restart
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts)) } catch { /* ignore */ }
   }, [accounts])
@@ -127,12 +169,30 @@ export default function App() {
   }, [returnWindow])
 
   useEffect(() => {
+    try { localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history)) } catch { /* ignore */ }
+  }, [history])
+
+  // heartbeat: continuously stamp "app is currently open" so that on next launch
+  // we can measure how long it's actually been closed, independent of any
+  // individual account's own timer
+  useEffect(() => {
+    const stamp = () => {
+      try { localStorage.setItem(HEARTBEAT_KEY, String(Date.now())) } catch { /* ignore */ }
+    }
+    stamp()
+    const id = setInterval(stamp, 2000)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
     const windowMs = returnWindow * 60 * 1000
     let justWentOverdue = false
+    const namesGoneOverdue: string[] = []
     setAccounts(prev => prev.map(a => {
-      if (a.state === 'pending' && a.switchedAt !== null) {
+      if (a.state === 'running' && a.switchedAt !== null) {
         if (now - a.switchedAt >= windowMs) {
           justWentOverdue = true
+          namesGoneOverdue.push(a.name)
           const t = shakeTimers.current.get(a.id)
           if (t) clearTimeout(t)
           const tid = setTimeout(() => {
@@ -144,8 +204,11 @@ export default function App() {
       }
       return a
     }))
-    if (justWentOverdue) playOverdueBell()
-  }, [now, returnWindow])
+    if (justWentOverdue) {
+      playOverdueBell()
+      namesGoneOverdue.forEach(n => logHistory(n, 'overdue'))
+    }
+  }, [now, returnWindow, logHistory])
 
   const overdueCount = accounts.filter(a => a.state === 'overdue').length
   const hasOverdue = overdueCount > 0
@@ -157,27 +220,60 @@ export default function App() {
       id: crypto.randomUUID(),
       name: trimmed,
       notes: '',
-      state: 'idle',
-      switchedAt: null,
+      state: 'running',
+      switchedAt: Date.now(),
       shaking: false,
     }])
+    logHistory(trimmed, 'added')
     setNameInput('')
-  }, [nameInput])
+  }, [nameInput, logHistory])
 
-  const handleSwitchAway = useCallback((id: string) => {
-    setAccounts(prev => prev.map(a =>
-      a.id === id ? { ...a, state: 'pending', switchedAt: Date.now() } : a
-    ))
-  }, [])
+  const handleQuickAdd = useCallback((name: string) => {
+    setAccounts(prev => [...prev, {
+      id: crypto.randomUUID(),
+      name,
+      notes: '',
+      state: 'running',
+      switchedAt: Date.now(),
+      shaking: false,
+    }])
+    logHistory(name, 'added')
+  }, [logHistory])
 
-  const handleBack = useCallback((id: string) => {
-    setAccounts(prev => prev.map(a =>
-      a.id === id ? { ...a, state: 'idle', switchedAt: null, shaking: false } : a
-    ))
-  }, [])
+  const handleImBack = useCallback((id: string) => {
+    setAccounts(prev => prev.map(a => {
+      if (a.id !== id) return a
+      logHistory(a.name, 'confirmed')
+      return { ...a, state: 'running', switchedAt: Date.now(), shaking: false }
+    }))
+  }, [logHistory])
+
+  const handleStop = useCallback((id: string) => {
+    setAccounts(prev => prev.map(a => {
+      if (a.id !== id) return a
+      logHistory(a.name, 'stopped')
+      return { ...a, state: 'stopped', switchedAt: null, shaking: false }
+    }))
+  }, [logHistory])
+
+  const handleResume = useCallback((id: string) => {
+    setAccounts(prev => prev.map(a => {
+      if (a.id !== id) return a
+      logHistory(a.name, 'resumed')
+      return { ...a, state: 'running', switchedAt: Date.now() }
+    }))
+  }, [logHistory])
 
   const handleRemove = useCallback((id: string) => {
-    setAccounts(prev => prev.filter(a => a.id !== id))
+    setAccounts(prev => {
+      const target = prev.find(a => a.id === id)
+      if (target) logHistory(target.name, 'removed')
+      return prev.filter(a => a.id !== id)
+    })
+  }, [logHistory])
+
+  const handleClearHistory = useCallback(() => {
+    setHistory([])
   }, [])
 
   const handleWindowBlur = () => {
@@ -187,7 +283,7 @@ export default function App() {
   }
 
   const sorted = [...accounts].sort((a, b) => {
-    const order = { overdue: 0, idle: 1, pending: 2 }
+    const order = { overdue: 0, running: 1, stopped: 2 }
     return order[a.state] - order[b.state]
   })
 
@@ -405,14 +501,34 @@ export default function App() {
               }}>
                 // ACCOUNTS
               </span>
-              <span style={{
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: '10.5px',
-                color: '#B0A0C8',
-                letterSpacing: '0.06em',
-              }}>
-                {accounts.length} LOADED
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={() => setHistoryOpen(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: '10.5px',
+                    color: '#5A3E9E',
+                    letterSpacing: '0.06em',
+                    textDecoration: 'underline',
+                    textUnderlineOffset: '2px',
+                  }}
+                  title="View history"
+                >
+                  HISTORY
+                </button>
+                <span style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: '10.5px',
+                  color: '#B0A0C8',
+                  letterSpacing: '0.06em',
+                }}>
+                  {accounts.length} LOADED
+                </span>
+              </div>
             </div>
 
             {accounts.length === 0 && (
@@ -445,8 +561,9 @@ export default function App() {
                   account={account}
                   now={now}
                   returnWindow={returnWindow}
-                  onSwitchAway={handleSwitchAway}
-                  onBack={handleBack}
+                  onImBack={handleImBack}
+                  onStop={handleStop}
+                  onResume={handleResume}
                   onRemove={handleRemove}
                 />
               ))}
@@ -454,6 +571,16 @@ export default function App() {
           </div>
 
       </div>
+
+      {historyOpen && (
+        <HistoryPanel
+          history={history}
+          activeNames={new Set(accounts.map(a => a.name))}
+          onClose={() => setHistoryOpen(false)}
+          onQuickAdd={handleQuickAdd}
+          onClearHistory={handleClearHistory}
+        />
+      )}
     </div>
   )
 }
@@ -586,12 +713,13 @@ function PixelButton({ label, onClick, disabled, color }: {
 }
 
 /* ─── Account card ─── */
-function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemove }: {
+function AccountCard({ account, now, returnWindow, onImBack, onStop, onResume, onRemove }: {
   account: Account
   now: number
   returnWindow: number
-  onSwitchAway: (id: string) => void
-  onBack: (id: string) => void
+  onImBack: (id: string) => void
+  onStop: (id: string) => void
+  onResume: (id: string) => void
   onRemove: (id: string) => void
 }) {
   const { id, name, notes, state, switchedAt, shaking } = account
@@ -599,12 +727,13 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
   const remaining = switchedAt ? Math.max(0, windowMs - (now - switchedAt)) : windowMs
   const progress = switchedAt ? Math.min(1, (now - switchedAt) / windowMs) : 0
 
-  const isPending = state === 'pending'
+  const isRunning = state === 'running'
   const isOverdue = state === 'overdue'
-  const isDimmed = isPending || isOverdue
+  const isStopped = state === 'stopped'
+  const isDimmed = isOverdue || isStopped
 
-  const borderColor = isOverdue ? '#A23262' : isPending ? '#C98A3E' : '#C8BAE8'
-  const shadowColor = isOverdue ? '#7A1040' : isPending ? '#8A5010' : '#A898C8'
+  const borderColor = isOverdue ? '#A23262' : isRunning ? '#C98A3E' : '#C8BAE8'
+  const shadowColor = isOverdue ? '#7A1040' : isRunning ? '#8A5010' : '#A898C8'
 
   return (
     <div
@@ -621,8 +750,8 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
         flexShrink: 0,
       }}
     >
-      {/* Top progress bar for pending */}
-      {isPending && (
+      {/* Top progress bar while running */}
+      {isRunning && (
         <div style={{ height: '3px', backgroundColor: 'rgba(201,138,62,0.2)', position: 'relative' }}>
           <div style={{
             position: 'absolute', top: 0, left: 0,
@@ -646,12 +775,13 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
         {/* LED dot — pixel square */}
         <div style={{
           width: '9px', height: '9px', flexShrink: 0,
-          backgroundColor: isOverdue ? '#A23262' : isPending ? '#C98A3E' : '#5A3E9E',
+          backgroundColor: isOverdue ? '#A23262' : isRunning ? '#C98A3E' : '#5A3E9E',
+          opacity: isStopped ? 0.45 : 1,
           boxShadow: isOverdue
             ? `0 0 0 2px #FAF3E6, 0 0 0 3px #A23262`
-            : isPending
+            : isRunning
             ? `0 0 0 2px #FAF3E6, 0 0 0 3px #C98A3E`
-            : `0 0 0 2px #FAF3E6, 0 0 0 3px #5A3E9E`,
+            : 'none',
         }} />
 
         {/* Name + notes */}
@@ -668,7 +798,7 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
           }}>
             {name}
           </div>
-          {notes && (
+          {notes ? (
             <div style={{
               fontFamily: "'IBM Plex Mono', monospace",
               fontSize: '10.5px',
@@ -681,7 +811,18 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
             }}>
               {notes}
             </div>
-          )}
+          ) : isStopped ? (
+            <div style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: '10.5px',
+              color: '#B0A0C8',
+              marginTop: '2px',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+            }}>
+              stopped
+            </div>
+          ) : null}
         </div>
 
         {/* Overdue badge */}
@@ -704,7 +845,7 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
         )}
 
         {/* Countdown */}
-        {isPending && (
+        {isRunning && (
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
             <div style={{
               fontFamily: "'Press Start 2P', monospace",
@@ -732,11 +873,14 @@ function AccountCard({ account, now, returnWindow, onSwitchAway, onBack, onRemov
 
         {/* Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-          {state === 'idle' && (
-            <PixelButton label="SWITCH >" onClick={() => onSwitchAway(id)} color="#5A3E9E" />
+          {isRunning && (
+            <PixelButton label="■ STOP" onClick={() => onStop(id)} color="#3D2E52" />
           )}
-          {(isPending || isOverdue) && (
-            <PixelButton label="I'M BACK" onClick={() => onBack(id)} color="#3D2E52" />
+          {isOverdue && (
+            <PixelButton label="I'M BACK" onClick={() => onImBack(id)} color="#3D2E52" />
+          )}
+          {isStopped && (
+            <PixelButton label="RESUME >" onClick={() => onResume(id)} color="#5A3E9E" />
           )}
           <PixelIconButton onClick={() => onRemove(id)} />
         </div>
@@ -820,6 +964,200 @@ function PixelIconButton({ onClick }: { onClick: () => void }) {
     >
       ×
     </button>
+  )
+}
+
+/* ─── relative time formatting ─── */
+function formatRelativeTime(timestamp: number, now: number): string {
+  const diff = now - timestamp
+  if (diff < 30 * 1000) return 'just now'
+  if (diff < 60 * 1000) return `${Math.floor(diff / 1000)}s ago`
+  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)}m ago`
+  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / 3600000)}h ago`
+  const days = Math.floor(diff / 86400000)
+  if (days < 7) return `${days}d ago`
+  const d = new Date(timestamp)
+  return `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`
+}
+
+const EVENT_META: Record<HistoryEntry['event'], { label: string; color: string }> = {
+  added: { label: 'ADDED', color: '#5A3E9E' },
+  overdue: { label: 'OVERDUE', color: '#A23262' },
+  confirmed: { label: "I'M BACK", color: '#C98A3E' },
+  stopped: { label: 'STOPPED', color: '#8A7BA8' },
+  resumed: { label: 'RESUMED', color: '#5A3E9E' },
+  removed: { label: 'REMOVED', color: '#B0A0C8' },
+}
+
+/* ─── History popup ─── */
+function HistoryPanel({ history, activeNames, onClose, onQuickAdd, onClearHistory }: {
+  history: HistoryEntry[]
+  activeNames: Set<string>
+  onClose: () => void
+  onQuickAdd: (name: string) => void
+  onClearHistory: () => void
+}) {
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 15000)
+    return () => clearInterval(id)
+  }, [])
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'absolute', inset: 0, zIndex: 20,
+        backgroundColor: 'rgba(61,46,82,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxHeight: '100%',
+          backgroundColor: '#FFFDF8',
+          border: '3px solid #3D2E52',
+          boxShadow: '4px 4px 0 #1A1028',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          backgroundColor: '#5A3E9E',
+          padding: '9px 11px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexShrink: 0,
+        }}>
+          <span style={{
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: '9px',
+            color: '#FAF3E6',
+            letterSpacing: '0.04em',
+          }}>
+            HISTORY
+          </span>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#FAF3E6', fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: '13px', opacity: 0.75, padding: '2px 4px', lineHeight: 1,
+            }}
+            title="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* List */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: '8px 10px' }}>
+          {history.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '24px 12px',
+              color: '#C0B0D8',
+              fontFamily: "'Press Start 2P', monospace",
+              fontSize: '8px',
+              letterSpacing: '0.06em',
+              lineHeight: 2,
+            }}>
+              NO HISTORY YET.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              {history.map(entry => {
+                const meta = EVENT_META[entry.event]
+                const isActive = activeNames.has(entry.accountName)
+                return (
+                  <div key={entry.id} style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '6px 8px',
+                    border: '1px solid #E0D0F0',
+                    backgroundColor: '#FAF3E6',
+                  }}>
+                    <div style={{ width: '6px', height: '6px', flexShrink: 0, backgroundColor: meta.color }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '10.5px',
+                        fontWeight: 500,
+                        color: '#3D2E52',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>
+                        {entry.accountName}
+                      </div>
+                      <div style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '8.5px',
+                        color: meta.color,
+                        letterSpacing: '0.05em',
+                        marginTop: '1px',
+                      }}>
+                        {meta.label} · {formatRelativeTime(entry.timestamp, nowTick)}
+                      </div>
+                    </div>
+                    {!isActive && (
+                      <button
+                        onClick={() => onQuickAdd(entry.accountName)}
+                        title={`Add "${entry.accountName}" again`}
+                        style={{
+                          flexShrink: 0,
+                          width: '22px', height: '22px',
+                          border: '2px solid #5A3E9E',
+                          backgroundColor: 'transparent',
+                          color: '#5A3E9E',
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                      >
+                        +
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {history.length > 0 && (
+          <div style={{
+            borderTop: '1px solid #E0D0F0',
+            padding: '7px 10px',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            flexShrink: 0,
+          }}>
+            <button
+              onClick={onClearHistory}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: '9.5px',
+                color: '#A23262',
+                letterSpacing: '0.05em',
+                textDecoration: 'underline',
+                textUnderlineOffset: '2px',
+              }}
+            >
+              CLEAR HISTORY
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
