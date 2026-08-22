@@ -81,11 +81,55 @@ function loadStoredHistory(): HistoryEntry[] {
   }
 }
 
-/* ─── synthesized one-shot bell chime (no external audio file needed) ─── */
-function playOverdueBell() {
+/* ─── synthesized one-shot bell chime (no external audio file needed) ───
+   A single shared AudioContext is created and unlocked the first time the
+   user clicks anything in the app (satisfies the browser's autoplay policy,
+   which blocks sound that isn't tied to a real user gesture). Every later
+   bell — even ones triggered by a background timer — reuses that same
+   already-unlocked context, so it can actually produce sound. */
+let sharedAudioCtx: AudioContext | null = null
+let audioUnlocked = false
+
+function getAudioContext(): AudioContext | null {
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
-    const ctx = new AudioCtx()
+    if (!sharedAudioCtx) {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      sharedAudioCtx = new AudioCtx()
+    }
+    return sharedAudioCtx
+  } catch {
+    return null
+  }
+}
+
+function unlockAudio() {
+  if (audioUnlocked) return
+  const ctx = getAudioContext()
+  if (!ctx) return
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => { /* ignore */ })
+  }
+  // play a near-silent buffer — fully unlocks audio output on some platforms
+  // even when the context reports itself as already "running"
+  try {
+    const buffer = ctx.createBuffer(1, 1, 22050)
+    const source = ctx.createBufferSource()
+    source.buffer = buffer
+    source.connect(ctx.destination)
+    source.start(0)
+  } catch {
+    // ignore
+  }
+  audioUnlocked = true
+}
+
+function playOverdueBell() {
+  const ctx = getAudioContext()
+  if (!ctx) return
+  try {
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => { /* ignore */ })
+    }
     const now = ctx.currentTime
 
     const tone = (freq: number, startGain: number, duration: number, delay: number) => {
@@ -103,8 +147,6 @@ function playOverdueBell() {
 
     tone(1046.5, 0.28, 0.55, 0)      // C6
     tone(1568.0, 0.14, 0.4, 0.02)    // G6 overtone
-
-    setTimeout(() => ctx.close(), 800)
   } catch {
     // audio unavailable — fail silently, never block the app
   }
@@ -182,6 +224,18 @@ export default function App() {
     stamp()
     const id = setInterval(stamp, 2000)
     return () => clearInterval(id)
+  }, [])
+
+  // unlock audio on the very first click anywhere in the app — required
+  // before the bell can actually produce sound later, since browsers block
+  // audio that isn't tied to a real user gesture
+  useEffect(() => {
+    const handler = () => {
+      unlockAudio()
+      window.removeEventListener('pointerdown', handler)
+    }
+    window.addEventListener('pointerdown', handler)
+    return () => window.removeEventListener('pointerdown', handler)
   }, [])
 
   useEffect(() => {
