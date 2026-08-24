@@ -29,8 +29,10 @@ interface HistoryEntry {
 }
 
 const DEFAULT_WINDOW = 5
+const DEFAULT_VOLUME = 0.6
 const STORAGE_KEY = 'switchboard.accounts.v2'
 const WINDOW_STORAGE_KEY = 'switchboard.returnWindow.v1'
+const VOLUME_STORAGE_KEY = 'switchboard.volume.v1'
 const HEARTBEAT_KEY = 'switchboard.lastActive.v1'
 const HISTORY_STORAGE_KEY = 'switchboard.history.v1'
 const HISTORY_MAX_ENTRIES = 200
@@ -67,6 +69,16 @@ function loadStoredWindow(): number {
     return !isNaN(n) && n >= 1 ? n : DEFAULT_WINDOW
   } catch {
     return DEFAULT_WINDOW
+  }
+}
+
+function loadStoredVolume(): number {
+  try {
+    const raw = localStorage.getItem(VOLUME_STORAGE_KEY)
+    const n = raw ? parseFloat(raw) : NaN
+    return !isNaN(n) && n >= 0 && n <= 1 ? n : DEFAULT_VOLUME
+  } catch {
+    return DEFAULT_VOLUME
   }
 }
 
@@ -123,7 +135,7 @@ function unlockAudio() {
   audioUnlocked = true
 }
 
-function playOverdueBell() {
+function playOverdueBell(volume: number) {
   const ctx = getAudioContext()
   if (!ctx) return
   try {
@@ -138,15 +150,20 @@ function playOverdueBell() {
       osc.type = 'sine'
       osc.frequency.setValueAtTime(freq, now + delay)
       gain.gain.setValueAtTime(0.0001, now + delay)
-      gain.gain.exponentialRampToValueAtTime(startGain, now + delay + 0.015)
+      gain.gain.exponentialRampToValueAtTime(startGain * volume, now + delay + 0.015)
       gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + duration)
       osc.connect(gain).connect(ctx.destination)
       osc.start(now + delay)
       osc.stop(now + delay + duration + 0.05)
     }
 
-    tone(1046.5, 0.28, 0.55, 0)      // C6
-    tone(1568.0, 0.14, 0.4, 0.02)    // G6 overtone
+    const RING_COUNT = 3
+    const RING_SPACING = 0.4 // seconds between the start of each ring
+    for (let i = 0; i < RING_COUNT; i++) {
+      const base = i * RING_SPACING
+      tone(1046.5, 0.28, 0.3, base)         // C6
+      tone(1568.0, 0.14, 0.2, base + 0.02)  // G6 overtone
+    }
   } catch {
     // audio unavailable — fail silently, never block the app
   }
@@ -188,7 +205,9 @@ export default function App() {
   const [nameInput, setNameInput] = useState('')
   const [returnWindow, setReturnWindow] = useState(loadStoredWindow)
   const [windowInput, setWindowInput] = useState(() => String(loadStoredWindow()))
+  const [volume, setVolume] = useState(loadStoredVolume)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const hasRunning = accounts.some(a => a.state === 'running' || a.state === 'overdue')
   const now = useNow(hasRunning)
@@ -213,6 +232,10 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history)) } catch { /* ignore */ }
   }, [history])
+
+  useEffect(() => {
+    try { localStorage.setItem(VOLUME_STORAGE_KEY, String(volume)) } catch { /* ignore */ }
+  }, [volume])
 
   // heartbeat: continuously stamp "app is currently open" so that on next launch
   // we can measure how long it's actually been closed, independent of any
@@ -240,29 +263,26 @@ export default function App() {
 
   useEffect(() => {
     const windowMs = returnWindow * 60 * 1000
-    let justWentOverdue = false
-    const namesGoneOverdue: string[] = []
-    setAccounts(prev => prev.map(a => {
-      if (a.state === 'running' && a.switchedAt !== null) {
-        if (now - a.switchedAt >= windowMs) {
-          justWentOverdue = true
-          namesGoneOverdue.push(a.name)
-          const t = shakeTimers.current.get(a.id)
-          if (t) clearTimeout(t)
-          const tid = setTimeout(() => {
-            setAccounts(cur => cur.map(x => x.id === a.id ? { ...x, shaking: false } : x))
-          }, 600)
-          shakeTimers.current.set(a.id, tid)
-          return { ...a, state: 'overdue', shaking: true }
-        }
-      }
-      return a
-    }))
-    if (justWentOverdue) {
-      playOverdueBell()
-      namesGoneOverdue.forEach(n => logHistory(n, 'overdue'))
+    const newlyOverdue = accounts.filter(a =>
+      a.state === 'running' && a.switchedAt !== null && (now - a.switchedAt >= windowMs)
+    )
+
+    if (newlyOverdue.length > 0) {
+      const overdueIds = new Set(newlyOverdue.map(a => a.id))
+      setAccounts(prev => prev.map(a => {
+        if (!overdueIds.has(a.id)) return a
+        const t = shakeTimers.current.get(a.id)
+        if (t) clearTimeout(t)
+        const tid = setTimeout(() => {
+          setAccounts(cur => cur.map(x => x.id === a.id ? { ...x, shaking: false } : x))
+        }, 600)
+        shakeTimers.current.set(a.id, tid)
+        return { ...a, state: 'overdue', shaking: true }
+      }))
+      playOverdueBell(volume)
+      newlyOverdue.forEach(a => logHistory(a.name, 'overdue'))
     }
-  }, [now, returnWindow, logHistory])
+  }, [now, returnWindow, logHistory, accounts, volume])
 
   const overdueCount = accounts.filter(a => a.state === 'overdue').length
   const hasOverdue = overdueCount > 0
@@ -557,6 +577,21 @@ export default function App() {
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button
+                  onClick={() => setSettingsOpen(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    lineHeight: 1,
+                    opacity: 0.85,
+                  }}
+                  title="Sound settings"
+                >
+                  🔊
+                </button>
+                <button
                   onClick={() => setHistoryOpen(true)}
                   style={{
                     background: 'none',
@@ -633,6 +668,14 @@ export default function App() {
           onClose={() => setHistoryOpen(false)}
           onQuickAdd={handleQuickAdd}
           onClearHistory={handleClearHistory}
+        />
+      )}
+
+      {settingsOpen && (
+        <SettingsPanel
+          volume={volume}
+          onVolumeChange={setVolume}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
     </div>
@@ -1210,6 +1253,115 @@ function HistoryPanel({ history, activeNames, onClose, onQuickAdd, onClearHistor
             </button>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+/* ─── Settings popup (volume) ─── */
+function SettingsPanel({ volume, onVolumeChange, onClose }: {
+  volume: number
+  onVolumeChange: (v: number) => void
+  onClose: () => void
+}) {
+  const percent = Math.round(volume * 100)
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'absolute', inset: 0, zIndex: 20,
+        backgroundColor: 'rgba(61,46,82,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%',
+          backgroundColor: '#FFFDF8',
+          border: '3px solid #3D2E52',
+          boxShadow: '4px 4px 0 #1A1028',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          backgroundColor: '#5A3E9E',
+          padding: '9px 11px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexShrink: 0,
+        }}>
+          <span style={{
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: '9px',
+            color: '#FAF3E6',
+            letterSpacing: '0.04em',
+          }}>
+            SOUND
+          </span>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#FAF3E6', fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: '13px', opacity: 0.75, padding: '2px 4px', lineHeight: 1,
+            }}
+            title="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: '8px',
+            }}>
+              <span style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: '10.5px',
+                fontWeight: 500,
+                letterSpacing: '0.08em',
+                color: '#7A6890',
+              }}>
+                BELL VOLUME
+              </span>
+              <span style={{
+                fontFamily: "'Press Start 2P', monospace",
+                fontSize: '10px',
+                color: '#5A3E9E',
+              }}>
+                {percent}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={percent}
+              onChange={e => onVolumeChange(parseInt(e.target.value, 10) / 100)}
+              style={{
+                width: '100%',
+                accentColor: '#5A3E9E',
+                cursor: 'pointer',
+              }}
+            />
+          </div>
+
+          <PixelButton
+            label="▶ TEST SOUND"
+            onClick={() => { unlockAudio(); playOverdueBell(volume) }}
+            color="#3D2E52"
+          />
+        </div>
       </div>
     </div>
   )
