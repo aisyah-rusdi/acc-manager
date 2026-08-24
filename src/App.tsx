@@ -1,24 +1,31 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { Account, HistoryEntry } from './types'
+import type { Account, HistoryEntry, SoundChoice } from './types'
 import {
   loadStoredAccounts,
   loadStoredWindow,
   loadStoredVolume,
   loadStoredHistory,
+  loadStoredSound,
   STORAGE_KEY,
   WINDOW_STORAGE_KEY,
   VOLUME_STORAGE_KEY,
+  SOUND_STORAGE_KEY,
   HEARTBEAT_KEY,
   HISTORY_STORAGE_KEY,
   HISTORY_MAX_ENTRIES,
+  SNOOZE_DURATION_MS,
 } from './lib/storage'
-import { unlockAudio, playOverdueBell } from './lib/audio'
+import { unlockAudio, playSoundChoice } from './lib/audio'
+import { notifyOverdue } from './lib/notifications'
 import { px, ditherBg } from './lib/format'
 import { PixelInput, PixelButton, TitleBarDot } from './components/Pixel'
 import { AccountCard } from './components/AccountCard'
 import { HistoryPanel } from './components/HistoryPanel'
 import { SettingsPanel } from './components/SettingsPanel'
 import { PixelBerries } from './components/PixelBerries'
+import { Toast } from './components/Toast'
+
+const UNDO_GRACE_PERIOD_MS = 5000
 
 function useNow(active: boolean) {
   const [now, setNow] = useState(() => Date.now())
@@ -30,6 +37,11 @@ function useNow(active: boolean) {
   return now
 }
 
+interface PendingRemoval {
+  account: Account
+  timeoutId: ReturnType<typeof setTimeout>
+}
+
 export default function App() {
   const [accounts, setAccounts] = useState<Account[]>(loadStoredAccounts)
   const [history, setHistory] = useState<HistoryEntry[]>(loadStoredHistory)
@@ -37,11 +49,16 @@ export default function App() {
   const [returnWindow, setReturnWindow] = useState(loadStoredWindow)
   const [windowInput, setWindowInput] = useState(() => String(loadStoredWindow()))
   const [volume, setVolume] = useState(loadStoredVolume)
+  const [sound, setSound] = useState<SoundChoice>(loadStoredSound)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(null)
 
   const hasRunning = accounts.some(a => a.state === 'running' || a.state === 'overdue')
-  const now = useNow(hasRunning)
+  const liveNow = useNow(hasRunning && !paused)
+  const pausedAtRef = useRef<number | null>(null)
+  const now = paused ? (pausedAtRef.current ?? liveNow) : liveNow
   const shakeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   const logHistory = useCallback((accountName: string, event: HistoryEntry['event']) => {
@@ -68,6 +85,30 @@ export default function App() {
     try { localStorage.setItem(VOLUME_STORAGE_KEY, String(volume)) } catch { /* ignore */ }
   }, [volume])
 
+  useEffect(() => {
+    try { localStorage.setItem(SOUND_STORAGE_KEY, sound) } catch { /* ignore */ }
+  }, [sound])
+
+  // pause-all: freeze the clock the moment pausing starts, and on resume
+  // shift every running account's switchedAt forward by however long the
+  // pause lasted, so remaining time is preserved rather than lost
+  useEffect(() => {
+    if (paused) {
+      pausedAtRef.current = Date.now()
+      return
+    }
+    const pausedAt = pausedAtRef.current
+    pausedAtRef.current = null
+    if (pausedAt === null) return
+    const pausedDuration = Date.now() - pausedAt
+    if (pausedDuration <= 0) return
+    setAccounts(prev => prev.map(a =>
+      a.state === 'running' && a.switchedAt !== null
+        ? { ...a, switchedAt: a.switchedAt + pausedDuration }
+        : a
+    ))
+  }, [paused])
+
   // heartbeat: continuously stamp "app is currently open" so that on next launch
   // we can measure how long it's actually been closed, independent of any
   // individual account's own timer
@@ -93,6 +134,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (paused) return
     const windowMs = returnWindow * 60 * 1000
     const newlyOverdue = accounts.filter(a =>
       a.state === 'running' && a.switchedAt !== null && (now - a.switchedAt >= windowMs)
@@ -110,10 +152,13 @@ export default function App() {
         shakeTimers.current.set(a.id, tid)
         return { ...a, state: 'overdue', shaking: true }
       }))
-      playOverdueBell(volume)
-      newlyOverdue.forEach(a => logHistory(a.name, 'overdue'))
+      playSoundChoice(sound, volume)
+      newlyOverdue.forEach(a => {
+        logHistory(a.name, 'overdue')
+        notifyOverdue(a.name)
+      })
     }
-  }, [now, returnWindow, logHistory, accounts, volume])
+  }, [now, returnWindow, logHistory, accounts, volume, sound, paused])
 
   const overdueCount = accounts.filter(a => a.state === 'overdue').length
   const hasOverdue = overdueCount > 0
@@ -124,7 +169,6 @@ export default function App() {
     setAccounts(prev => [...prev, {
       id: crypto.randomUUID(),
       name: trimmed,
-      notes: '',
       state: 'running',
       switchedAt: Date.now(),
       shaking: false,
@@ -137,7 +181,6 @@ export default function App() {
     setAccounts(prev => [...prev, {
       id: crypto.randomUUID(),
       name,
-      notes: '',
       state: 'running',
       switchedAt: Date.now(),
       shaking: false,
@@ -152,6 +195,18 @@ export default function App() {
       return { ...a, state: 'running', switchedAt: Date.now(), shaking: false }
     }))
   }, [logHistory])
+
+  // snooze doesn't reset the full timer like "I'm back" does — it just leaves
+  // a short fixed amount of time (SNOOZE_DURATION_MS) on the clock
+  const handleSnooze = useCallback((id: string) => {
+    const windowMs = returnWindow * 60 * 1000
+    setAccounts(prev => prev.map(a => {
+      if (a.id !== id) return a
+      logHistory(a.name, 'snoozed')
+      const newSwitchedAt = Date.now() - Math.max(0, windowMs - SNOOZE_DURATION_MS)
+      return { ...a, state: 'running', switchedAt: newSwitchedAt, shaking: false }
+    }))
+  }, [logHistory, returnWindow])
 
   const handleStop = useCallback((id: string) => {
     setAccounts(prev => prev.map(a => {
@@ -169,17 +224,47 @@ export default function App() {
     }))
   }, [logHistory])
 
+  // deleting doesn't remove the account for good right away — it's pulled
+  // from the list immediately, but held onto for a few seconds so the user
+  // can undo before the removal is finalized and logged to history
   const handleRemove = useCallback((id: string) => {
-    setAccounts(prev => {
-      const target = prev.find(a => a.id === id)
-      if (target) logHistory(target.name, 'removed')
-      return prev.filter(a => a.id !== id)
+    const target = accounts.find(a => a.id === id)
+    if (!target) return
+
+    // finalize any previous pending removal immediately so only one toast
+    // (and one pending account) exists at a time
+    if (pendingRemoval) {
+      clearTimeout(pendingRemoval.timeoutId)
+      logHistory(pendingRemoval.account.name, 'removed')
+    }
+
+    setAccounts(prev => prev.filter(a => a.id !== id))
+    const timeoutId = setTimeout(() => {
+      logHistory(target.name, 'removed')
+      setPendingRemoval(null)
+    }, UNDO_GRACE_PERIOD_MS)
+    setPendingRemoval({ account: target, timeoutId })
+  }, [accounts, pendingRemoval, logHistory])
+
+  const handleUndoRemove = useCallback(() => {
+    setPendingRemoval(current => {
+      if (!current) return current
+      clearTimeout(current.timeoutId)
+      setAccounts(prev => [...prev, current.account])
+      return null
     })
-  }, [logHistory])
+  }, [])
 
   const handleClearHistory = useCallback(() => {
     setHistory([])
   }, [])
+
+  // clear any in-flight undo timeout if the app unmounts mid-grace-period
+  useEffect(() => {
+    return () => {
+      if (pendingRemoval) clearTimeout(pendingRemoval.timeoutId)
+    }
+  }, [pendingRemoval])
 
   const handleWindowBlur = () => {
     const v = parseInt(windowInput, 10)
@@ -276,17 +361,53 @@ export default function App() {
               SWITCHBOARD
             </h1>
 
-            {/* Status readout — informational only, not clickable */}
-            <div style={{
-              border: hasOverdue ? '2px solid #A23262' : '1px dashed rgba(200,186,232,0.35)',
-              backgroundColor: hasOverdue ? '#A23262' : 'transparent',
-              boxShadow: hasOverdue ? px('#7A1040', 2) : 'none',
-              padding: hasOverdue ? '5px 9px' : '4px 8px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}>
-              {hasOverdue ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {/* Pause-all toggle — freezes every running/overdue timer at once */}
+              <button
+                onClick={() => setPaused(p => !p)}
+                title={paused ? 'Resume all timers' : 'Pause all timers'}
+                style={{
+                  border: `2px solid ${paused ? '#FAF3E6' : 'rgba(250,243,230,0.4)'}`,
+                  backgroundColor: paused ? '#FAF3E6' : 'transparent',
+                  color: paused ? '#5A3E9E' : '#FAF3E6',
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  fontFamily: "'Press Start 2P', monospace",
+                  fontSize: '7px',
+                  letterSpacing: '0.05em',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                <span>{paused ? '▶' : '⏸'}</span>
+                {paused ? 'RESUME ALL' : 'PAUSE ALL'}
+              </button>
+
+              {/* Status readout — informational only, not clickable */}
+              <div style={{
+                border: hasOverdue ? '2px solid #A23262' : '1px dashed rgba(200,186,232,0.35)',
+                backgroundColor: hasOverdue ? '#A23262' : 'transparent',
+                boxShadow: hasOverdue ? px('#7A1040', 2) : 'none',
+                padding: hasOverdue ? '5px 9px' : '4px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}>
+              {paused ? (
+                <>
+                  <div style={{ width: '6px', height: '6px', backgroundColor: '#C98A3E' }} />
+                  <span style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: '10.5px',
+                    fontWeight: 500,
+                    color: 'rgba(250,243,230,0.6)',
+                    letterSpacing: '0.06em',
+                  }}>
+                    PAUSED
+                  </span>
+                </>
+              ) : hasOverdue ? (
                 <>
                   <div style={{
                     width: '8px', height: '8px',
@@ -328,6 +449,7 @@ export default function App() {
                   </span>
                 </>
               )}
+              </div>
             </div>
           </div>
 
@@ -483,6 +605,7 @@ export default function App() {
                   now={now}
                   returnWindow={returnWindow}
                   onImBack={handleImBack}
+                  onSnooze={handleSnooze}
                   onStop={handleStop}
                   onResume={handleResume}
                   onRemove={handleRemove}
@@ -507,7 +630,16 @@ export default function App() {
         <SettingsPanel
           volume={volume}
           onVolumeChange={setVolume}
+          sound={sound}
+          onSoundChange={setSound}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {pendingRemoval && (
+        <Toast
+          message={`Removed ${pendingRemoval.account.name}`}
+          onUndo={handleUndoRemove}
         />
       )}
     </div>

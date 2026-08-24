@@ -1,14 +1,17 @@
-import type { Account, HistoryEntry } from '../types'
+import type { Account, HistoryEntry, SoundChoice } from '../types'
 
 export const DEFAULT_WINDOW = 5
 export const DEFAULT_VOLUME = 0.6
+export const DEFAULT_SOUND: SoundChoice = 'bell'
 export const STORAGE_KEY = 'switchboard.accounts.v2'
 export const WINDOW_STORAGE_KEY = 'switchboard.returnWindow.v1'
 export const VOLUME_STORAGE_KEY = 'switchboard.volume.v1'
+export const SOUND_STORAGE_KEY = 'switchboard.sound.v1'
 export const HEARTBEAT_KEY = 'switchboard.lastActive.v1'
 export const HISTORY_STORAGE_KEY = 'switchboard.history.v1'
 export const HISTORY_MAX_ENTRIES = 200
 export const CLOSE_GRACE_PERIOD_MS = 5 * 60 * 1000 // fixed 5 min — independent of the per-account return window
+export const SNOOZE_DURATION_MS = 2 * 60 * 1000
 
 export function loadStoredAccounts(): Account[] {
   try {
@@ -62,5 +65,14 @@ export function loadStoredHistory(): HistoryEntry[] {
     return Array.isArray(parsed) ? parsed : []
   } catch {
     return []
+  }
+}
+
+export function loadStoredSound(): SoundChoice {
+  try {
+    const raw = localStorage.getItem(SOUND_STORAGE_KEY)
+    return raw === 'sparkle' ? 'sparkle' : DEFAULT_SOUND
+  } catch {
+    return DEFAULT_SOUND
   }
 }

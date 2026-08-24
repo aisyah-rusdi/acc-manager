@@ -2,16 +2,17 @@ import type { Account } from '../types'
 import { formatCountdown } from '../lib/format'
 import { PixelButton, PixelIconButton } from './Pixel'
 
-export function AccountCard({ account, now, returnWindow, onImBack, onStop, onResume, onRemove }: {
+export function AccountCard({ account, now, returnWindow, onImBack, onSnooze, onStop, onResume, onRemove }: {
   account: Account
   now: number
   returnWindow: number
   onImBack: (id: string) => void
+  onSnooze: (id: string) => void
   onStop: (id: string) => void
   onResume: (id: string) => void
   onRemove: (id: string) => void
 }) {
-  const { id, name, notes, state, switchedAt, shaking } = account
+  const { id, name, state, switchedAt, shaking } = account
   const windowMs = returnWindow * 60 * 1000
   const remaining = switchedAt ? Math.max(0, windowMs - (now - switchedAt)) : windowMs
   const progress = switchedAt ? Math.min(1, (now - switchedAt) / windowMs) : 0
@@ -73,7 +74,7 @@ export function AccountCard({ account, now, returnWindow, onImBack, onStop, onRe
             : 'none',
         }} />
 
-        {/* Name + notes */}
+        {/* Name */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontFamily: "'IBM Plex Mono', monospace",
@@ -87,20 +88,7 @@ export function AccountCard({ account, now, returnWindow, onImBack, onStop, onRe
           }}>
             {name}
           </div>
-          {notes ? (
-            <div style={{
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: '10.5px',
-              color: '#9A88B0',
-              marginTop: '2px',
-              letterSpacing: '0.03em',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}>
-              {notes}
-            </div>
-          ) : isStopped ? (
+          {isStopped ? (
             <div style={{
               fontFamily: "'IBM Plex Mono', monospace",
               fontSize: '10.5px',
@@ -166,7 +154,10 @@ export function AccountCard({ account, now, returnWindow, onImBack, onStop, onRe
             <PixelButton label="■ STOP" onClick={() => onStop(id)} color="#3D2E52" />
           )}
           {isOverdue && (
-            <PixelButton label="I'M BACK" onClick={() => onImBack(id)} color="#3D2E52" />
+            <>
+              <PixelButton label="SNOOZE" onClick={() => onSnooze(id)} color="#5A3E9E" />
+              <PixelButton label="I'M BACK" onClick={() => onImBack(id)} color="#3D2E52" />
+            </>
           )}
           {isStopped && (
             <PixelButton label="RESUME >" onClick={() => onResume(id)} color="#5A3E9E" />

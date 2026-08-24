@@ -73,3 +73,46 @@ export function playOverdueBell(volume: number) {
     // audio unavailable — fail silently, never block the app
   }
 }
+
+/* ─── synthesized sparkle chime — a bright, quick upward flourish of
+   high notes rather than the bell's low resonant rings ─── */
+export function playSparkle(volume: number) {
+  const ctx = getAudioContext()
+  if (!ctx) return
+  try {
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => { /* ignore */ })
+    }
+    const now = ctx.currentTime
+
+    const twinkle = (freq: number, startGain: number, duration: number, delay: number) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'triangle'
+      osc.frequency.setValueAtTime(freq, now + delay)
+      gain.gain.setValueAtTime(0.0001, now + delay)
+      gain.gain.exponentialRampToValueAtTime(startGain * volume, now + delay + 0.008)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + duration)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(now + delay)
+      osc.stop(now + delay + duration + 0.05)
+    }
+
+    // quick ascending run of bright notes, staggered close together
+    const NOTES = [1568.0, 1975.5, 2349.3, 2793.0, 3135.9] // G6, B6, D7, F7, G7
+    const STEP = 0.06
+    NOTES.forEach((freq, i) => {
+      twinkle(freq, 0.16, 0.22, i * STEP)
+    })
+  } catch {
+    // audio unavailable — fail silently, never block the app
+  }
+}
+
+export function playSoundChoice(choice: 'bell' | 'sparkle', volume: number) {
+  if (choice === 'sparkle') {
+    playSparkle(volume)
+  } else {
+    playOverdueBell(volume)
+  }
+}

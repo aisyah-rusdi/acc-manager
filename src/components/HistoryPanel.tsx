@@ -9,6 +9,7 @@ const EVENT_META: Record<HistoryEntry['event'], { label: string; color: string }
   stopped: { label: 'STOPPED', color: '#8A7BA8' },
   resumed: { label: 'RESUMED', color: '#5A3E9E' },
   removed: { label: 'REMOVED', color: '#B0A0C8' },
+  snoozed: { label: 'SNOOZED', color: '#C98A3E' },
 }
 
 export function HistoryPanel({ history, activeNames, onClose, onQuickAdd, onClearHistory }: {
