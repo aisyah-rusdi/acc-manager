@@ -20,6 +20,7 @@ export function PixelPanel({
         boxShadow: `4px 4px 0 ${accent === '#3D2E52' ? '#1A1028' : '#3D2E52'}`,
         backgroundColor: '#FFFDF8',
       }}>
+        {/* panel header */}
         <div style={{
           backgroundColor: accent,
           padding: '6px 14px',
@@ -39,6 +40,7 @@ export function PixelPanel({
           </span>
           {headerRight}
         </div>
+        {/* panel body */}
         <div style={{ padding: '18px 18px' }}>
           {children}
         </div>

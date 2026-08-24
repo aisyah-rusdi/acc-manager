@@ -11,7 +11,6 @@ export const HEARTBEAT_KEY = 'switchboard.lastActive.v1'
 export const HISTORY_STORAGE_KEY = 'switchboard.history.v1'
 export const HISTORY_MAX_ENTRIES = 200
 export const CLOSE_GRACE_PERIOD_MS = 5 * 60 * 1000 // fixed 5 min — independent of the per-account return window
-export const SNOOZE_DURATION_MS = 2 * 60 * 1000
 
 export function loadStoredAccounts(): Account[] {
   try {

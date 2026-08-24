@@ -11,7 +11,7 @@ export interface Account {
 export interface HistoryEntry {
   id: string
   accountName: string
-  event: 'added' | 'overdue' | 'confirmed' | 'stopped' | 'resumed' | 'removed' | 'snoozed'
+  event: 'added' | 'overdue' | 'stopped' | 'resumed' | 'removed' | 'snoozed'
   timestamp: number
 }
 

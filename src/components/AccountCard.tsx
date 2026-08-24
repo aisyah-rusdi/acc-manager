@@ -2,11 +2,10 @@ import type { Account } from '../types'
 import { formatCountdown } from '../lib/format'
 import { PixelButton, PixelIconButton } from './Pixel'
 
-export function AccountCard({ account, now, returnWindow, onImBack, onSnooze, onStop, onResume, onRemove }: {
+export function AccountCard({ account, now, returnWindow, onSnooze, onStop, onResume, onRemove }: {
   account: Account
   now: number
   returnWindow: number
-  onImBack: (id: string) => void
   onSnooze: (id: string) => void
   onStop: (id: string) => void
   onResume: (id: string) => void
@@ -154,10 +153,7 @@ export function AccountCard({ account, now, returnWindow, onImBack, onSnooze, on
             <PixelButton label="■ STOP" onClick={() => onStop(id)} color="#3D2E52" />
           )}
           {isOverdue && (
-            <>
-              <PixelButton label="SNOOZE" onClick={() => onSnooze(id)} color="#5A3E9E" />
-              <PixelButton label="I'M BACK" onClick={() => onImBack(id)} color="#3D2E52" />
-            </>
+            <PixelButton label="SNOOZE" onClick={() => onSnooze(id)} color="#3D2E52" />
           )}
           {isStopped && (
             <PixelButton label="RESUME >" onClick={() => onResume(id)} color="#5A3E9E" />

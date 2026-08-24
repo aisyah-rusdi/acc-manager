@@ -22,6 +22,12 @@ function createWindow () {
 
   win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+      win.webContents.toggleDevTools();
+    }
+  });
+
   ipcMain.on('window-minimize', () => win.minimize());
   ipcMain.on('window-maximize-toggle', () => {
     if (win.isMaximized()) win.unmaximize();

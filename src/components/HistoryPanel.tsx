@@ -5,12 +5,17 @@ import { formatRelativeTime } from '../lib/format'
 const EVENT_META: Record<HistoryEntry['event'], { label: string; color: string }> = {
   added: { label: 'ADDED', color: '#5A3E9E' },
   overdue: { label: 'OVERDUE', color: '#A23262' },
-  confirmed: { label: "I'M BACK", color: '#C98A3E' },
   stopped: { label: 'STOPPED', color: '#8A7BA8' },
   resumed: { label: 'RESUMED', color: '#5A3E9E' },
   removed: { label: 'REMOVED', color: '#B0A0C8' },
   snoozed: { label: 'SNOOZED', color: '#C98A3E' },
 }
+
+// Fallback for any event value not present in EVENT_META — e.g. legacy
+// entries like 'confirmed' left over in localStorage from an old build.
+// Without this, EVENT_META[entry.event] is undefined and the very next
+// line (meta.color) throws mid-render, which blanks the whole app.
+const FALLBACK_META = { label: 'UPDATED', color: '#B0A0C8' }
 
 export function HistoryPanel({ history, activeNames, onClose, onQuickAdd, onClearHistory }: {
   history: HistoryEntry[]
@@ -95,7 +100,7 @@ export function HistoryPanel({ history, activeNames, onClose, onQuickAdd, onClea
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               {history.map(entry => {
-                const meta = EVENT_META[entry.event]
+                const meta = EVENT_META[entry.event] ?? FALLBACK_META
                 const isActive = activeNames.has(entry.accountName)
                 return (
                   <div key={entry.id} style={{
