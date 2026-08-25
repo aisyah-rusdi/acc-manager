@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { Account, HistoryEntry, SoundChoice } from './types'
+import type { Account, HistoryEntry, SoundChoice } from './lib/types'
 import {
   loadStoredAccounts,
   loadStoredWindow,
